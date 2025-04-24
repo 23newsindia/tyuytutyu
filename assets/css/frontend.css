@@ -70,12 +70,14 @@
     margin: 0 auto;
     padding: 0;
     overflow: hidden;
+    touch-action: pan-y pinch-zoom;
 }
 
 .pc-carousel-container {
     display: flex;
     transition: transform 0.5s ease;
     will-change: transform;
+    touch-action: pan-x pan-y;
 }
 
 /* Desktop Grid Mode */
@@ -328,4 +330,9 @@
     font-weight: 600;
     border-radius: 0 0 0 4px;
     z-index: 2;
+}
+
+/* No transition class */
+.pc-carousel-container.no-transition {
+    transition: none !important;
 }
