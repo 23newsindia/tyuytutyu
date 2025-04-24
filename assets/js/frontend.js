@@ -52,9 +52,11 @@ class ProductCarousel {
         this.currentIndex = 0;
         this.isMobile = window.innerWidth < 768;
         this.touchStartX = 0;
+        this.touchStartY = 0;
         this.touchEndX = 0;
         this.containerStartX = 0;
         this.isDragging = false;
+        this.isScrolling = false;
         this.resizeTimeout = null;
         this.autoplayInterval = null;
         this.slidePositions = [];
@@ -114,7 +116,7 @@ class ProductCarousel {
         this.container.style.scrollBehavior = 'smooth';
         this.container.style.padding = '0 20px';
         this.container.style.cursor = 'grab';
-        this.container.style.touchAction = 'pan-x pinch-zoom';
+        this.container.style.touchAction = 'none';
         
         this.slides.forEach(slide => {
             slide.style.flex = `0 0 ${itemWidth}px`;
@@ -138,6 +140,7 @@ class ProductCarousel {
         this.container.style.scrollSnapType = 'none';
         this.container.style.padding = '0 20px';
         this.container.style.cursor = 'grab';
+        this.container.style.touchAction = 'none';
         
         this.slides.forEach(slide => {
             slide.style.flex = `0 0 ${itemWidth}px`;
@@ -219,9 +222,11 @@ class ProductCarousel {
         const touch = e.touches[0];
         this.touchIdentifier = touch.identifier;
         this.touchStartX = touch.clientX;
+        this.touchStartY = touch.clientY;
         this.touchStartTime = Date.now();
         this.containerStartX = this.container.scrollLeft;
         this.isDragging = false;
+        this.isScrolling = false;
         this.touchMoveX = 0;
         
         this.clickedElement = document.elementFromPoint(
@@ -231,10 +236,7 @@ class ProductCarousel {
         
         if (this.settings.autoplay) this.stopAutoplay();
         
-        // Prevent default only if we're likely to start dragging
-        if (!this.clickedElement) {
-            e.preventDefault();
-        }
+        // Don't prevent default yet - wait to determine direction
     }
 
     handleTouchMove(e) {
@@ -242,38 +244,44 @@ class ProductCarousel {
         if (!touch) return;
 
         const currentX = touch.clientX;
+        const currentY = touch.clientY;
         const deltaX = this.touchStartX - currentX;
+        const deltaY = this.touchStartY - currentY;
         this.touchMoveX = deltaX;
 
-        // Start dragging only after a minimum threshold
-        if (Math.abs(deltaX) > 5) {
-            this.isDragging = true;
+        // Determine scroll direction on first move
+        if (!this.isDragging && !this.isScrolling) {
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                this.isDragging = true;
+                this.isScrolling = false;
+                e.preventDefault(); // Prevent vertical scroll
+            } else {
+                this.isDragging = false;
+                this.isScrolling = true;
+                return; // Allow vertical scroll
+            }
+        }
+
+        if (this.isDragging) {
             this.container.classList.add('dragging');
-            
-            // Calculate new scroll position with momentum
             const newScrollLeft = this.containerStartX + deltaX;
-            
-            // Apply the scroll with smooth interpolation
             this.container.scrollLeft = newScrollLeft;
-            
-            // Prevent default to avoid competing with native scroll
             e.preventDefault();
         }
     }
 
     handleTouchEnd(e) {
-        if (!this.isDragging) {
+        if (!this.isDragging && !this.isScrolling) {
             if (this.clickedElement && Math.abs(this.touchMoveX) < 5) {
                 this.clickedElement.click();
             }
-        } else {
+        } else if (this.isDragging) {
             const touchEndTime = Date.now();
             const timeElapsed = touchEndTime - this.touchStartTime;
             const velocity = this.touchMoveX / timeElapsed;
 
             if (Math.abs(velocity) > this.settings.swipeVelocity) {
-                // Use velocity for momentum scrolling
-                const momentum = velocity * 300; // Adjust multiplier for desired momentum effect
+                const momentum = velocity * 300;
                 const targetScroll = this.container.scrollLeft + momentum;
                 
                 this.container.scrollTo({
@@ -287,8 +295,10 @@ class ProductCarousel {
 
         this.container.classList.remove('dragging');
         this.isDragging = false;
+        this.isScrolling = false;
         this.touchIdentifier = null;
         this.touchStartX = 0;
+        this.touchStartY = 0;
         this.touchMoveX = 0;
 
         if (this.settings.autoplay) this.startAutoplay();
@@ -299,8 +309,10 @@ class ProductCarousel {
         
         this.touchStartTime = Date.now();
         this.touchStartX = e.clientX;
+        this.touchStartY = e.clientY;
         this.containerStartX = this.container.scrollLeft;
         this.isDragging = false;
+        this.isScrolling = false;
         this.clickedElement = e.target.closest('a, button, [onclick]');
         
         e.preventDefault();
@@ -310,13 +322,23 @@ class ProductCarousel {
     handleMouseMove(e) {
         if (!this.touchStartX) return;
         
-        const currentX = e.clientX;
-        const diff = this.touchStartX - currentX;
+        const deltaX = this.touchStartX - e.clientX;
+        const deltaY = this.touchStartY - e.clientY;
         
-        if (Math.abs(diff) > 5) {
-            this.isDragging = true;
+        if (!this.isDragging && !this.isScrolling) {
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                this.isDragging = true;
+                this.isScrolling = false;
+            } else {
+                this.isDragging = false;
+                this.isScrolling = true;
+                return;
+            }
+        }
+        
+        if (this.isDragging) {
             this.container.classList.add('dragging', 'grabbing');
-            this.container.scrollLeft = this.containerStartX + diff;
+            this.container.scrollLeft = this.containerStartX + deltaX;
         }
     }
 
@@ -341,7 +363,9 @@ class ProductCarousel {
 
         if (this.settings.autoplay) this.startAutoplay();
         this.isDragging = false;
+        this.isScrolling = false;
         this.touchStartX = 0;
+        this.touchStartY = 0;
     }
 
     handleResize() {
